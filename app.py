@@ -19,9 +19,12 @@ except ImportError:  # older whisperx
     from whisperx import DiarizationPipeline  # type: ignore
 
 # ── Config ──
-MODEL_SIZE = "large-v3"
-DEVICE = "cpu"               # WhisperX picks no GPU here; change to "cuda" if available
+# CTranslate2 (the WhisperX backend) supports CPU and NVIDIA CUDA only — no Intel Arc/XPU.
+# On CPU, 'large-v3-turbo' is ~4-6x faster than 'large-v3' at near-identical accuracy.
+MODEL_SIZE = os.environ.get("WHISPER_MODEL", "large-v3-turbo")
+DEVICE = "cpu"               # change to "cuda" only on an NVIDIA GPU
 COMPUTE_TYPE = "int8"        # int8 for CPU; use "float16" on GPU
+CPU_THREADS = int(os.environ.get("CPU_THREADS", "8"))
 BATCH_SIZE = 8
 HF_TOKEN = os.environ.get("HF_TOKEN")  # required for diarization
 # Diarization model. pyannote.audio 4.x is built around 'speaker-diarization-community-1';
@@ -36,8 +39,10 @@ diarize_model = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global asr_model, diarize_model
-    print(f"Loading WhisperX ASR model ({MODEL_SIZE})... first run downloads ~3 GB.")
-    asr_model = whisperx.load_model(MODEL_SIZE, DEVICE, compute_type=COMPUTE_TYPE)
+    print(f"Loading WhisperX ASR model ({MODEL_SIZE}) on {DEVICE} with {CPU_THREADS} threads...")
+    asr_model = whisperx.load_model(
+        MODEL_SIZE, DEVICE, compute_type=COMPUTE_TYPE, threads=CPU_THREADS
+    )
 
     if HF_TOKEN:
         print("Loading diarization pipeline...")

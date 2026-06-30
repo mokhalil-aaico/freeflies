@@ -7,7 +7,7 @@ Built on [WhisperX](https://github.com/m-bain/whisperX) (faster-whisper + forced
 ## Features
 
 - Drag-and-drop audio upload (MP3, MP4, WAV, M4A, FLAC, OGG, WEBM)
-- Transcription with Whisper `large-v3`
+- Transcription with Whisper `large-v3-turbo`
 - Automatic language detection
 - Word-level timestamp alignment
 - Speaker diarization (`Speaker 1`, `Speaker 2`, ...) with auto-detected speaker count
@@ -17,11 +17,13 @@ Built on [WhisperX](https://github.com/m-bain/whisperX) (faster-whisper + forced
 
 | Setting | Value |
 |---|---|
-| Model | `large-v3` |
+| Model | `large-v3-turbo` (set `WHISPER_MODEL=large-v3` for max accuracy) |
 | Language | auto-detect |
 | Task | transcribe |
 | VAD | enabled (internal to WhisperX) |
 | Output | JSON |
+
+> Transcription runs on CPU. CTranslate2 (the WhisperX backend) supports CPU and NVIDIA CUDA only, so Intel Arc / NPU cannot accelerate it. `large-v3-turbo` with multi-threading is the fast path on CPU.
 
 ## Requirements
 
@@ -81,5 +83,7 @@ Set in the environment or `.env`:
 |---|---|---|
 | `HF_TOKEN` | — | Hugging Face token; enables diarization |
 | `DIARIZE_MODEL` | `pyannote/speaker-diarization-community-1` | Diarization pipeline |
+| `WHISPER_MODEL` | `large-v3-turbo` | ASR model size |
+| `CPU_THREADS` | `8` | CPU threads for transcription |
 
-GPU users: edit `DEVICE = "cuda"` and `COMPUTE_TYPE = "float16"` in `app.py` for a large speedup.
+NVIDIA GPU users: edit `DEVICE = "cuda"` and `COMPUTE_TYPE = "float16"` in `app.py` for a large speedup.
