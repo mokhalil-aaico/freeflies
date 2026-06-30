@@ -245,6 +245,52 @@
       color: var(--green);
     }
 
+    /* ── View toggle ── */
+    .view-toggle {
+      display: flex;
+      gap: 0;
+      margin-bottom: 1rem;
+      border: 1px solid var(--granite);
+      width: fit-content;
+    }
+
+    .view-toggle button {
+      background: transparent;
+      color: var(--steel);
+      border: none;
+      padding: 0.4rem 1rem;
+      font-family: inherit;
+      font-size: 0.72rem;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .view-toggle button.active { background: var(--green); color: var(--space); font-weight: 600; }
+
+    /* ── Transcript view ── */
+    .transcript {
+      background: #111;
+      padding: 1.5rem;
+      overflow: auto;
+      max-height: 55vh;
+      border: 1px solid #252525;
+    }
+
+    .turn { display: flex; gap: 1rem; margin-bottom: 1.1rem; }
+    .turn:last-child { margin-bottom: 0; }
+
+    .turn-speaker {
+      flex-shrink: 0;
+      width: 90px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding-top: 0.1rem;
+    }
+
+    .turn-time { font-size: 0.62rem; color: #5c5c5c; font-weight: 400; margin-top: 0.15rem; }
+    .turn-text { font-size: 0.85rem; line-height: 1.6; color: #ddd; }
+
     /* ── JSON output ── */
     .json-wrap {
       background: #111;
@@ -261,6 +307,8 @@
       white-space: pre;
       color: #ccc;
     }
+
+    .hidden { display: none !important; }
 
     /* ── Footer ── */
     footer {
@@ -351,7 +399,14 @@
 
       <div class="meta-strip" id="metaStrip"></div>
 
-      <div class="json-wrap">
+      <div class="view-toggle">
+        <button id="tabTranscript" class="active">transcript</button>
+        <button id="tabJson">json</button>
+      </div>
+
+      <div class="transcript" id="transcript"></div>
+
+      <div class="json-wrap hidden" id="jsonWrap">
         <pre id="jsonOutput"></pre>
       </div>
     </div>
@@ -381,9 +436,24 @@
     const spinner     = document.getElementById('spinner');
     const results     = document.getElementById('results');
     const metaStrip   = document.getElementById('metaStrip');
+    const transcript  = document.getElementById('transcript');
+    const jsonWrap    = document.getElementById('jsonWrap');
     const jsonOutput  = document.getElementById('jsonOutput');
     const copyBtn     = document.getElementById('copyBtn');
     const downloadBtn = document.getElementById('downloadBtn');
+    const tabTranscript = document.getElementById('tabTranscript');
+    const tabJson       = document.getElementById('tabJson');
+
+    const SPEAKER_COLORS = ['#57D873', '#387BF0', '#E4B23B', '#E47ACF', '#3BE4D8', '#E4793B'];
+
+    tabTranscript.addEventListener('click', () => {
+      tabTranscript.classList.add('active'); tabJson.classList.remove('active');
+      transcript.classList.remove('hidden'); jsonWrap.classList.add('hidden');
+    });
+    tabJson.addEventListener('click', () => {
+      tabJson.classList.add('active'); tabTranscript.classList.remove('active');
+      jsonWrap.classList.remove('hidden'); transcript.classList.add('hidden');
+    });
 
     // Drag and drop
     dropZone.addEventListener('dragover', e => {
@@ -462,11 +532,21 @@
       status.className = 'status';
     }
 
+    function speakerColor(label) {
+      const m = /(\d+)/.exec(label || '');
+      const idx = m ? (parseInt(m[1], 10) - 1) : 0;
+      return SPEAKER_COLORS[((idx % SPEAKER_COLORS.length) + SPEAKER_COLORS.length) % SPEAKER_COLORS.length];
+    }
+
     function showResults(data) {
+      const speakersCell = data.diarized
+        ? `<div class="meta-item"><div class="meta-label">speakers</div><div class="meta-value">${data.speaker_count}</div></div>`
+        : `<div class="meta-item"><div class="meta-label">speakers</div><div class="meta-value" style="color:var(--steel)">off</div></div>`;
+
       metaStrip.innerHTML = `
         <div class="meta-item">
           <div class="meta-label">language</div>
-          <div class="meta-value">${data.language.toUpperCase()} <span style="color:var(--steel);font-weight:400;font-size:0.7rem">${(data.language_probability * 100).toFixed(1)}%</span></div>
+          <div class="meta-value">${(data.language || '?').toUpperCase()}</div>
         </div>
         <div class="meta-item">
           <div class="meta-label">duration</div>
@@ -476,13 +556,45 @@
           <div class="meta-label">segments</div>
           <div class="meta-value">${data.segments.length}</div>
         </div>
-        <div class="meta-item">
-          <div class="meta-label">task</div>
-          <div class="meta-value">transcribe</div>
-        </div>
+        ${speakersCell}
       `;
+
+      // Transcript view — merge consecutive segments from the same speaker
+      transcript.innerHTML = '';
+      let current = null;
+      data.segments.forEach(seg => {
+        const spk = seg.speaker || (data.diarized ? 'Unknown' : null);
+        if (!current || current.speaker !== spk) {
+          current = { speaker: spk, start: seg.start, end: seg.end, text: seg.text };
+          renderTurn(current, data.diarized);
+        } else {
+          current.end = seg.end;
+          current.text += ' ' + seg.text;
+          current.el.querySelector('.turn-text').textContent = current.text;
+          current.el.querySelector('.turn-time').textContent = `${formatClock(current.start)}–${formatClock(current.end)}`;
+        }
+      });
+
       jsonOutput.textContent = JSON.stringify(data, null, 2);
       results.classList.add('visible');
+    }
+
+    function renderTurn(turn, diarized) {
+      const el = document.createElement('div');
+      el.className = 'turn';
+      const color = speakerColor(turn.speaker);
+      const speakerHtml = diarized
+        ? `<div class="turn-speaker" style="color:${color}">${turn.speaker || 'Unknown'}<div class="turn-time">${formatClock(turn.start)}–${formatClock(turn.end)}</div></div>`
+        : `<div class="turn-speaker" style="color:var(--steel)"><div class="turn-time" style="margin-top:0">${formatClock(turn.start)}–${formatClock(turn.end)}</div></div>`;
+      el.innerHTML = `${speakerHtml}<div class="turn-text">${turn.text}</div>`;
+      transcript.appendChild(el);
+      turn.el = el;
+    }
+
+    function formatClock(s) {
+      const m = Math.floor(s / 60);
+      const sec = Math.floor(s % 60);
+      return `${m}:${sec.toString().padStart(2, '0')}`;
     }
 
     // Copy / Download

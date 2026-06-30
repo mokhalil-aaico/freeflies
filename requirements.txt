@@ -1,4 +1,5 @@
-faster-whisper
+whisperx
 fastapi
 uvicorn[standard]
 python-multipart
+python-dotenv

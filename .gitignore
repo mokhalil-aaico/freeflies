@@ -9,6 +9,9 @@ env/
 # Model cache
 .cache/
 
+# Secrets
+.env
+
 # Temp files
 *.tmp
 uploads/
