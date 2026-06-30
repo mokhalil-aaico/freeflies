@@ -1,11 +1,37 @@
 import os
 import gc
+import glob
+import shutil
 import tempfile
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from dotenv import load_dotenv
 load_dotenv()  # read HF_TOKEN (and any overrides) from .env
+
+
+def _ensure_ffmpeg_on_path():
+    """WhisperX shells out to ffmpeg. If the launching terminal's PATH predates the
+    ffmpeg install, find it and add it to PATH so audio decoding works regardless."""
+    if shutil.which("ffmpeg"):
+        return
+    candidates = []
+    local = os.environ.get("LOCALAPPDATA", "")
+    if local:
+        candidates += glob.glob(os.path.join(
+            local, "Microsoft", "WinGet", "Packages", "Gyan.FFmpeg*", "**", "bin"), recursive=True)
+    for base in (r"C:\Program Files", r"C:\Program Files (x86)"):
+        candidates += glob.glob(os.path.join(base, "**", "ffmpeg.exe"), recursive=True)
+    for c in candidates:
+        bin_dir = c if os.path.isdir(c) else os.path.dirname(c)
+        if os.path.exists(os.path.join(bin_dir, "ffmpeg.exe")):
+            os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+            print(f"Added ffmpeg to PATH: {bin_dir}")
+            return
+    print("WARNING: ffmpeg not found. Audio decoding will fail until ffmpeg is installed.")
+
+
+_ensure_ffmpeg_on_path()
 
 import whisperx
 from fastapi import FastAPI, File, UploadFile, HTTPException
